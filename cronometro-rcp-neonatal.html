@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cronómetro RCP neonatal</title>
+<style>
+:root{--bg:#0b1118;--fg:#ffffff;--mut:#8fa3b5;--acc:#35c2a1;--amb:#f2b84b;--bad:#ef5b5b;--line:#2a3948}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;transition:background .15s;-webkit-user-select:none;user-select:none}
+body.flash{background:#5a3f00}
+body.flash-min{background:#0d5a44}
+body.flash-ev{background:#5a1414}
+#bar{height:12px;background:#1b2733;flex:none}
+#barfill{height:100%;width:0;background:var(--acc)}
+main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1vh;padding:6px 12px;min-height:0;overflow:hidden}
+#time{font-size:min(28vw,30vh);font-weight:800;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em;cursor:pointer}
+#time.running{color:var(--fg)}
+#time.paused{color:var(--mut)}
+#banner{font-size:min(9vw,9vh);font-weight:800;line-height:1.1;min-height:1.15em;color:var(--amb);text-align:center;white-space:pre-line}
+#next{color:var(--mut);font-size:min(4.2vw,3.2vh)}
+#events{width:100%;max-width:640px;display:flex;flex-direction:column;gap:4px}
+.ev{display:none;font-size:min(5.2vw,4vh);font-weight:700;text-align:center;padding:4px 10px;border-radius:10px;background:#1b2733;font-variant-numeric:tabular-nums}
+.ev.active{display:block}
+.ev.fired{background:#c0392b;font-size:min(7vw,5.4vh)}
+#marks{list-style:none;margin:0;padding:0;width:100%;max-width:640px;font-size:min(4.4vw,3.2vh);font-variant-numeric:tabular-nums;color:var(--fg)}
+#marks li{display:flex;justify-content:space-between;padding:2px 10px;border-bottom:1px solid var(--line)}
+#marks li span:last-child{color:var(--mut)}
+.controls{display:grid;grid-template-columns:2fr 1fr;gap:10px;padding:10px 12px;flex:none}
+.controls3{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px 10px;flex:none}
+.controls2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:0 12px 10px;flex:none}
+.controls4{padding:0 12px 12px;flex:none}
+.controls4 button{width:100%}
+.controls5{display:grid;grid-template-columns:2fr 1fr;gap:10px;padding:0 12px 10px;flex:none}
+.controls5 button{font-size:min(4.2vw,3.2vh)}
+.controls5 button.on{background:#c0392b;border-color:#c0392b}
+button:disabled{opacity:.45;cursor:default}
+.ev.cnt{background:#0d5a44;font-size:min(8vw,6vh)}
+.ev.cntdone{background:#8a5a00;font-size:min(7vw,5.4vh)}
+button{font:inherit;color:var(--fg);background:#22313f;border:1px solid var(--line);border-radius:14px;min-height:56px;font-weight:700;cursor:pointer;padding:8px}
+button:active{filter:brightness(1.25)}
+#toggle{background:var(--acc);color:#07201a;border-color:var(--acc);font-size:min(7vw,5vh);min-height:min(18vw,11vh)}
+#toggle.running{background:#e0a030;border-color:#e0a030;color:#241800}
+#mark{font-size:min(5vw,3.6vh)}
+.controls3 button{font-size:min(4.2vw,3.2vh)}
+.controls3 button.on{background:#c0392b;border-color:#c0392b}
+.small{font-size:min(3.8vw,2.8vh);font-weight:600}
+/* pantallas apaisadas o bajas: compactar para que nada se corte */
+@media (orientation:landscape) and (max-height:760px){
+  #time{font-size:min(20vw,27vh)}
+  #banner{font-size:min(5.5vw,7vh);min-height:0}
+  #next,#marks{display:none}
+  .ev{font-size:min(3.6vw,5vh);padding:2px 8px}
+  .ev.fired{font-size:min(4.4vw,6vh)}
+  button{min-height:42px;padding:4px}
+  #toggle{min-height:52px;font-size:min(4vw,6vh)}
+  .controls{padding:6px 12px}
+  .controls3,.controls2{padding:0 12px 6px;gap:8px}
+  .controls4{padding:0 12px 8px}
+  .controls5{padding:0 12px 6px;gap:8px}
+  .ev.cnt{font-size:min(5vw,7vh)}
+  .ev.cntdone{font-size:min(4.6vw,6.4vh)}
+}
+</style>
+</head>
+<body>
+<div id="bar"><div id="barfill"></div></div>
+<main>
+  <div id="time" class="paused" title="Toca para iniciar o pausar">00:00</div>
+  <div id="banner" aria-live="polite"></div>
+  <div id="next">Pulsa INICIAR cuando comience la reanimación</div>
+  <div id="events">
+    <div id="ev_vpp" class="ev"></div>
+    <div id="ev_cc" class="ev"></div>
+    <div id="ev_cnt" class="ev"></div>
+  </div>
+  <ol id="marks"></ol>
+</main>
+<div class="controls">
+  <button id="toggle">INICIAR</button>
+  <button id="mark">MARCA</button>
+</div>
+<div class="controls3">
+  <button id="btn_vpp">INICIO VPP</button>
+  <button id="btn_cc">INICIO COMPRESIONES</button>
+</div>
+<div class="controls5">
+  <button id="cntGo">CONTAR FC</button>
+  <button id="cntWin" class="small">6 s (×10)</button>
+</div>
+<div class="controls2">
+  <button id="reset" class="small">REINICIAR</button>
+  <button id="mute" class="small">SONIDO: SÍ</button>
+  <button id="full" class="small">PANTALLA COMPLETA</button>
+</div>
+<div class="controls4">
+  <button id="ccmode" class="small">Compresiones: reevaluar FC cada 60 s (AHA) · toca para 30 s (ERC)</button>
+</div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  var elapsed = 0, startT = 0, running = false, tm = null;
+  var lastAlert = 0, marks = [], muted = false, ctx = null, wake = null, resetArm = 0;
+  var flashTimer = null;
+
+  /* ---------- Configuración ---------- */
+  var APGAR = {60: "APGAR 1'", 300: "APGAR 5'", 600: "APGAR 10'"};   /* segundos desde el inicio */
+  var EVENTS = {
+    vpp: {name: 'VPP',           dur: 30, active: false, due: 0, firedAt: -1e9, btn: 'INICIO VPP',           btnOn: 'VPP EN CURSO · PARAR',           what: 'ventilación'},
+    cc:  {name: 'COMPRESIONES',  dur: 60, active: false, due: 0, firedAt: -1e9, btn: 'INICIO COMPRESIONES',  btnOn: 'COMPRESIONES EN CURSO · PARAR',  what: 'compresiones'}
+  };
+  var KEYS = ['vpp', 'cc'];
+
+  function now(){ return performance.now(); }
+  function cur(){ return running ? elapsed + (now() - startT) : elapsed; }
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function fmt(ms){
+    var s = Math.floor(ms / 1000);
+    return pad(Math.floor(s / 60)) + ':' + pad(s % 60);
+  }
+  function label(sec){
+    var m = Math.floor(sec / 60), s = sec % 60;
+    if (s === 0) return m + (m === 1 ? ' MINUTO' : ' MINUTOS');
+    return (m ? m + ' min ' : '') + s + ' s';
+  }
+
+  /* ---------- Audio ---------- */
+  function initAudio(){
+    if (ctx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ctx = new AC();
+  }
+  function beep(at, freq, dur){
+    if (!ctx || muted) return;
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.5, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(at); o.stop(at + dur + 0.02);
+  }
+
+  /* ---------- Avisos ---------- */
+  function flashBody(cls){
+    document.body.classList.remove('flash', 'flash-min', 'flash-ev');
+    document.body.classList.add(cls);
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function(){
+      document.body.classList.remove('flash', 'flash-min', 'flash-ev');
+    }, 3000);
+  }
+  function vibrate(p){ if (navigator.vibrate){ try { navigator.vibrate(p); } catch(e){} } }
+
+  function alertAt(sec){
+    var isMin = sec % 60 === 0;
+    var extra = APGAR[sec];
+    $('banner').textContent = label(sec) + (extra ? '\n' + extra : '');
+    flashBody(isMin ? 'flash-min' : 'flash');
+    if (ctx){
+      var t = ctx.currentTime;
+      if (extra){ beep(t, 1319, 0.2); beep(t + 0.28, 1319, 0.2); beep(t + 0.56, 1319, 0.2); }
+      else if (isMin){ beep(t, 1175, 0.2); beep(t + 0.28, 1175, 0.2); }
+      else { beep(t, 880, 0.25); }
+    }
+    vibrate(extra ? [200, 100, 200, 100, 200] : (isMin ? [200, 100, 200] : 250));
+  }
+
+  function eventAlert(e){
+    e.firedAt = cur();                 /* la línea del evento se pone roja unos segundos */
+    flashBody('flash-ev');
+    if (ctx){
+      var t = ctx.currentTime;
+      beep(t, 660, 0.18); beep(t + 0.24, 880, 0.18); beep(t + 0.48, 1100, 0.3);
+    }
+    vibrate([300, 100, 300]);
+  }
+
+  /* ---------- Conteo de la FC (independiente del cronómetro) ---------- */
+  var CNT = {active: false, t0: 0, dur: 6, mult: 10, tm: null, doneUntil: 0};
+
+  function cntRender(){
+    var el = $('ev_cnt');
+    if (CNT.active){
+      var left = Math.max(0, CNT.dur - (now() - CNT.t0) / 1000);
+      el.textContent = 'CONTAR FC · ' + Math.ceil(left) + ' s';
+      el.className = 'ev active cnt';
+    } else if (now() < CNT.doneUntil){
+      el.textContent = '¡TIEMPO! · multiplica por ' + CNT.mult;
+      el.className = 'ev active cntdone';
+    } else {
+      el.className = 'ev';
+      clearInterval(CNT.tm);
+      CNT.tm = null;
+    }
+  }
+
+  function cntButtons(on){
+    var b = $('cntGo');
+    b.textContent = on ? 'CANCELAR CONTEO' : 'CONTAR FC';
+    b.classList.toggle('on', on);
+    $('cntWin').disabled = on;
+  }
+
+  function cntFinish(){
+    CNT.active = false;
+    CNT.doneUntil = now() + 8000;
+    cntButtons(false);
+    if (ctx){
+      var t = ctx.currentTime;
+      beep(t, 1000, 0.12); beep(t + 0.2, 1000, 0.12);     /* doble pitido final */
+    }
+    flashBody('flash');
+    vibrate([250, 100, 250]);
+  }
+
+  function cntTick(){
+    if (CNT.active && now() - CNT.t0 >= CNT.dur * 1000) cntFinish();
+    cntRender();
+  }
+
+  function cntStart(){
+    initAudio();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    CNT.active = true;
+    CNT.t0 = now();
+    CNT.doneUntil = 0;
+    cntButtons(true);
+    if (ctx) beep(ctx.currentTime, 1000, 0.15);           /* pitido de inicio */
+    clearInterval(CNT.tm);
+    CNT.tm = setInterval(cntTick, 50);
+    cntTick();
+  }
+
+  function cntCancel(){
+    CNT.active = false;
+    CNT.doneUntil = 0;
+    cntButtons(false);
+    cntRender();
+  }
+
+  function update(){
+    var t = cur();
+    $('time').textContent = fmt(t);
+    $('barfill').style.width = ((t % 30000) / 30000 * 100) + '%';
+
+    var blocks = Math.floor(t / 30000);
+    if (blocks > lastAlert){
+      for (var b = lastAlert + 1; b <= blocks; b++){
+        if (b === blocks || APGAR[b * 30]) alertAt(b * 30);
+      }
+      lastAlert = blocks;
+    }
+
+    KEYS.forEach(function(k){
+      var e = EVENTS[k], el = $('ev_' + k);
+      if (!e.active){ el.classList.remove('active'); return; }
+      if (running && t >= e.due){
+        eventAlert(e);
+        e.due += e.dur * 1000;
+        if (e.due <= t) e.due = t + e.dur * 1000;
+      }
+      var left = Math.max(0, Math.ceil((e.due - t) / 1000));
+      var fired = (t - e.firedAt) < 8000;
+      el.textContent = fired
+        ? '¡REEVALUAR FC! · ' + e.name + ' ' + e.dur + ' s'
+        : e.name + ' · reevaluar FC en ' + left + ' s';
+      el.classList.add('active');
+      el.classList.toggle('fired', fired);
+    });
+
+    if (running || elapsed > 0){
+      $('next').textContent = 'Próximo aviso en ' + (30 - Math.floor((t % 30000) / 1000)) + ' s';
+    }
+  }
+
+  /* ---------- Controles ---------- */
+  function setBtn(){
+    var b = $('toggle');
+    if (running){ b.textContent = 'PAUSAR'; b.classList.add('running'); }
+    else { b.textContent = elapsed > 0 ? 'CONTINUAR' : 'INICIAR'; b.classList.remove('running'); }
+    $('time').className = running ? 'running' : 'paused';
+  }
+
+  function requestWake(){
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function(w){ wake = w; }).catch(function(){});
+  }
+
+  function toggle(){
+    initAudio();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    if (running){
+      elapsed += now() - startT;
+      running = false;
+      clearInterval(tm);
+      if (wake){ try { wake.release(); } catch(e){} wake = null; }
+    } else {
+      startT = now();
+      running = true;
+      tm = setInterval(update, 50);
+      requestWake();
+    }
+    setBtn();
+    update();
+  }
+
+  function addMark(lbl){
+    var t = cur();
+    if (t <= 0) return;
+    marks.push({t: t, l: (typeof lbl === 'string') ? lbl : ''});
+    renderMarks();
+  }
+
+  function renderMarks(){
+    var ol = $('marks');
+    ol.innerHTML = '';
+    var start = Math.max(0, marks.length - 4);
+    for (var i = marks.length - 1; i >= start; i--){
+      var prev = i > 0 ? marks[i - 1].t : 0;
+      var li = document.createElement('li');
+      var a = document.createElement('span');
+      var b = document.createElement('span');
+      a.textContent = (marks[i].l || 'Marca ' + (i + 1)) + '  ' + fmt(marks[i].t);
+      b.textContent = '+' + fmt(marks[i].t - prev);
+      li.appendChild(a); li.appendChild(b);
+      ol.appendChild(li);
+    }
+  }
+
+  function resetEvents(){
+    KEYS.forEach(function(k){
+      var e = EVENTS[k], b = $('btn_' + k);
+      e.active = false;
+      e.firedAt = -1e9;
+      b.classList.remove('on');
+      b.textContent = e.btn;
+    });
+  }
+
+  function toggleEvent(k){
+    var e = EVENTS[k], b = $('btn_' + k);
+    if (e.active){
+      e.active = false;
+      b.classList.remove('on');
+      b.textContent = e.btn;
+      addMark('Fin ' + e.name);
+    } else {
+      if (cur() <= 0) return;           /* el reloj debe haber empezado */
+      e.active = true;
+      e.firedAt = -1e9;
+      e.due = cur() + e.dur * 1000;
+      b.classList.add('on');
+      b.textContent = e.btnOn;
+      addMark('Inicio ' + e.name);
+    }
+    update();
+  }
+
+  function doReset(){
+    running = false; clearInterval(tm);
+    if (wake){ try { wake.release(); } catch(e){} wake = null; }
+    elapsed = 0; lastAlert = 0; marks = [];
+    clearTimeout(flashTimer);
+    document.body.classList.remove('flash', 'flash-min', 'flash-ev');
+    $('banner').textContent = '';
+    $('barfill').style.width = '0';
+    resetEvents();
+    cntCancel();
+    renderMarks();
+    setBtn();
+    update();
+    $('next').textContent = 'Pulsa INICIAR cuando comience la reanimación';
+  }
+
+  $('toggle').addEventListener('click', toggle);
+  $('time').addEventListener('click', toggle);
+  $('mark').addEventListener('click', function(){ addMark(); });
+  $('btn_vpp').addEventListener('click', function(){ toggleEvent('vpp'); });
+  $('btn_cc').addEventListener('click', function(){ toggleEvent('cc'); });
+  $('cntGo').addEventListener('click', function(){ if (CNT.active) cntCancel(); else cntStart(); });
+  $('cntWin').addEventListener('click', function(){
+    if (CNT.active) return;
+    CNT.dur = (CNT.dur === 6) ? 10 : (CNT.dur === 10 ? 15 : 6);
+    CNT.mult = 60 / CNT.dur;
+    this.textContent = CNT.dur + ' s (×' + CNT.mult + ')';
+  });
+
+  $('ccmode').addEventListener('click', function(){
+    var e = EVENTS.cc;
+    e.dur = (e.dur === 60) ? 30 : 60;
+    if (e.active) e.due = cur() + e.dur * 1000;
+    this.textContent = (e.dur === 60)
+      ? 'Compresiones: reevaluar FC cada 60 s (AHA) · toca para 30 s (ERC)'
+      : 'Compresiones: reevaluar FC cada 30 s (ERC) · toca para 60 s (AHA)';
+    update();
+  });
+
+  $('reset').addEventListener('click', function(){
+    if (elapsed === 0 && !running) return;
+    var b = this;
+    if (now() - resetArm < 2500){
+      resetArm = 0;
+      b.textContent = 'REINICIAR';
+      doReset();
+    } else {
+      resetArm = now();
+      b.textContent = '¿SEGURO? PULSA DE NUEVO';
+      setTimeout(function(){ if (resetArm) b.textContent = 'REINICIAR'; }, 2500);
+    }
+  });
+
+  $('mute').addEventListener('click', function(){
+    muted = !muted;
+    this.textContent = muted ? 'SONIDO: NO' : 'SONIDO: SÍ';
+  });
+
+  var fullBtn = $('full');
+  if (!document.documentElement.requestFullscreen){ fullBtn.style.display = 'none'; }
+  fullBtn.addEventListener('click', function(){
+    if (document.fullscreenElement){ document.exitFullscreen(); }
+    else { document.documentElement.requestFullscreen().catch(function(){}); }
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.code === 'Space'){ e.preventDefault(); toggle(); }
+    else if (e.key === 'm' || e.key === 'M'){ addMark(); }
+    else if (e.key === 'v' || e.key === 'V'){ toggleEvent('vpp'); }
+    else if (e.key === 'c' || e.key === 'C'){ toggleEvent('cc'); }
+    else if (e.key === 't' || e.key === 'T'){ $('cntGo').click(); }
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if (document.visibilityState === 'visible' && running) requestWake();
+  });
+
+  setBtn();
+  update();
+})();
+</script>
+</body>
+</html>
